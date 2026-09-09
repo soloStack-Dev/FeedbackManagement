@@ -1,0 +1,62 @@
+# THE BIGGEST CHALLENGE
+
+The single hardest problem in this build, the full journey, and why it mattered.
+
+---
+
+## Title: orpc (v2 beta) type + wire-protocol black box
+
+That's the one. Two orpc problems consumed the majority of the debugging time and
+blocked everything downstream:
+
+### 1) The type-level dead end
+`createORPCClient<AppRouter>` is orpc v1's documented API, but in 2.0.0-beta.34 the
+server router's leaves are `DecoratedProcedure` objects — an object with a handler
+attached — **not** the callable `Client` signature the client package's
+`AnyNestedClient` constraint requires. The result was a cascade of confusing
+secondary errors:
+- `orpc.event.list` reported *"This expression is not callable"*
+- `queryFn: () => orpc.event.list()` typed `data` as `never[]`
+- `useMutation({ mutationFn })` input collapsed to `never`
+- feedback page + events page callbacks became implicit `any`
+
+Root cause was an API drift nobody could have guessed: the type-correct entry
+point is `RouterClient<AppRouter>` exported from `@orpc/server` (a mapped type
+that converts the router tree into client-callable procedures). One line of the
+type system was the difference between 30 compile errors and a clean build.
+
+### 2) The wire-protocol black box
+The fetch adapter (`@orpc/client/fetch` + `@orpc/server/fetch`) uses the
+Boundary-spec serialization (`toFetchBody`/`toStandardLazyResponse`) — not the
+simple `{ input }` JSON of orpc v1. We could not curl-test this by hand.
+
+**How it was beaten:** a dedicated smoke-test script (`scripts/smoke-orpc.mjs`)
+that drives the *actual* client through the *actual* running server
+(`bun run start`) and asserts the full loop:
+```
+event.list ✓ → event.detail ✓ → feedback.list ✓
+→ feedback.create (INSERT into live Aiven MySQL) ✓
+→ event.detail shows updated rating 4.7 → 4.5, reviewCount 1 → 2 ✓
+→ cleanup deletes the row and restores aggregates ✓
+```
+Passing that proved: URL topology (`/api/orpc` + catch-all route + `prefix`),
+codec round-trip, zod validation, drizzle inserts/aggregates, ssl pool, and query
+invalidation inputs — end to end.
+
+## Why it mattered
+Every page in the app depends on orpc: Home (featured event), Events (grid), and
+Feedback (the write path). Had we shipped on orpc v1 assumptions, the entire data
+layer would have been dead on arrival — a serialization or path mismatch returns
+404 and the UI silently shows a skeleton forever. The smoke test is the guard
+that prevents exactly that class of regression.
+
+## Lessons that apply to the next build
+1. **Beta packages drift hard** — verify exports against the installed `.d.ts`
+   files in `node_modules`, not against documentation or memory.
+2. **A one-line type change can cascade for miles** — fix the root type, then let
+   everything downstream re-infer; don't hand-patch each call site.
+3. **Never trust a codec you can't curl** — build a runnable end-to-end script
+   against the real server before shipping the wiring.
+4. **When a parser blames an innocent line** (the `'}' expected` runaround in
+   events/page.tsx), bisect the file mechanically and rewrite cleanly rather than
+   staring at bytes — see syntax-errors.txt item 1.

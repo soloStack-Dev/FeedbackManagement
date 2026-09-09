@@ -1,0 +1,46 @@
+# Warnings + Decisions
+
+Every warning observed and, where relevant, the decision taken.
+(Companion files: runtime-errors.txt, syntax-errors.txt, biggest-challenge.txt)
+
+---
+
+## Lint/build warnings (all resolved)
+
+1. **`'Geist_Mono' is defined but never used`** (app/layout.tsx)
+   - Removed the unused `Geist_Mono` import; `--font-ef` (Geist) is the only family the design uses.
+
+2. **`'Chip'/'Skeleton' is defined but never used`** (app/events/page.tsx)
+   - Removed from the import list after rewriting the Events page.
+
+3. **`'index' is assigned a value but never used`** (components/events/EventCard.tsx)
+   - Dropped the unused `index` prop from `EventCard` (callers no longer pass it).
+
+4. **`Using <img> could result in slower LCP... @next/next/no-img-element`** (components/home/Analytics.tsx)
+   - Swapped `<img>` → `next/image` `<Image />` (fill/cover 40×40 avatar). Also cleaned a duplicated-join quirk (`["+","1"].join("")` → `"+1"`).
+
+5. **`'asc'/'sql' imported but never used`** (lib/orpc/router.ts)
+   - Trimmed the drizzle import to the used symbols (`avg, count, desc, eq`).
+
+## Runtime / tooling warnings (expected, non-fatal)
+
+6. **mysql2: `WARNING: Ignoring invalid configuration option: ssl-mode`**
+   - The `?ssl-mode=REQUIRED` in `DATABASE_URL` is not a mysql2 option. TLS is instead configured via `ssl: { rejectUnauthorized: false }` in `lib/db/index.ts`. Intentionally left the URL untouched so `drizzle.config.ts` keeps working.
+
+7. **PowerShell `-replace` corruption (seed file)**
+   - A PowerShell regex `-replace` on `scripts/seed.ts` mangled the file's content (regex metacharacter escaping). Decision: never bulk-edit source files via shell string ops; rewrite with the Write tool and diff. This is why `syntax-errors.txt` items were handled by clean rewrites.
+
+8. **`Spider: "Ignore listed remote roots"` / `.env` interactive notice**
+   - Not an error; the CI runner checking remote-only URLs. Ignored.
+
+## Design/tooling decisions logged for transparency
+
+9. **`react-icon` (v1.0.0) is a 2016-era FontAwesome CDN wrapper** — it requires an external FA stylesheet and cannot style icons via CSS-in-JS as MUI does. Decision: uninstalled usage, added `@mui/icons-material@9.4.0` (the MUI-native icon set) for all iconography.
+
+10. **drizzle `rowsAffected` is undefined for MySQL inserts** — the seed log previously read `undefined events`. Decision: reworked seed output to count from fetched rows; documented in runtime errors.
+
+11. **MUI v9 Grid/TextField/icon API drift** — `Grid2`→`Grid`, `InputProps`→`slotProps.input`, `StarOutline`→`StarBorder`. Verify component exports against `node_modules/@mui/*` *.d.ts before authoring new UI.
+
+---
+
+*All warnings cleared; only intentional/expected messages (mysql2 options note) remain.*

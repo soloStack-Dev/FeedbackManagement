@@ -1,0 +1,24 @@
+# Hydration Errors + Fixes
+
+## 1. `Hydration failed because the server rendered HTML didn't match the client` — MUI AppBar / Navbar
+
+- **Reported:** user console error on `/events` (Turbopack dev + prod), attributed to `components/layout/Navbar.tsx:30` (`<AppBar>`).
+- **Server vs client diff (verbatim from React):**
+  ```
+  + <header className="MuiPaper-root MuiPaper-elevation MuiPaper-elevation0 MuiAppBar-root MuiAppB...">
+  - <style data-emotion="css-global kn59wi" data-s="">
+  ```
+  The server rendered a `<style data-emotion="css-global ...">` at exactly the position in the DOM where the client expected the AppBar's `<header>` element.
+- **Root cause:** `app/providers.tsx` rendered MUI's `ThemeProvider` + `CssBaseline` without an emotion `CacheProvider` wired to Next's App Router SSR. Emotion therefore injected its `<style>` tags **inline at point-of-use during server render** (the `css-global` reset leaked into the body tree). On the client, emotion hoists the same styles into `<head>`, so React saw a style tag where it expected the real element and declared a mismatch.
+- **Fix (official Next App Router + MUI pattern):**
+  1. New `lib/emotion-registry.tsx` — client component that creates a `createCache({ key: "css" })` per request, buffers inserted style names via a custom `cache.insert`, and flushes them into `<head>` through `useServerInsertedHTML` (one `<style data-emotion>` per request).
+  2. `app/layout.tsx` — wrapped `<Providers>` in `<EmotionRegistry>` inside `<body>`.
+- **Verification (prod server, `/events` HTML):**
+  - pre-fix: emotion style tag appeared in the body between `</body>` content — i.e. where `<header>` should be.
+  - post-fix: exactly 1 `data-emotion` block, positioned in `<head>` (index < body start); `<body>` opens and the first element is `<header class="MuiPaper-root ... MuiAppBar-positionSticky">` with no stray `<style>` in the tree.
+- **Files touched:** `lib/emotion-registry.tsx` (new), `app/layout.tsx`, `challenges/hydration-errors.txt` (this file).
+
+## Notes for future SSR work in this repo
+- Any emotion/MUI global styling needs `EmotionRegistry` from `lib/emotion-registry.tsx`.
+- Don't fight this with `suppressHydrationWarning` — it masks real SSR bugs.
+- If a future mismatch is reported at a MUI component (AppBar, TextField, Select), check the SAME symptom first: look for `<style data-emotion` tags in the server HTML body via `curl`/`Invoke-WebRequest` before touching component logic.

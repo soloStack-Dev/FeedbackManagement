@@ -1,0 +1,74 @@
+# Syntax Errors + Fixes
+
+Every syntax / parsing error hit while building EventFlow, and how it was resolved.
+(Companion files: runtime-errors.txt, warnings.txt, biggest-challenge.txt)
+
+---
+
+## 1. `app/events/page.tsx — Parsing error: '}' expected (57:91)`
+
+- **When:** first `bun run lint` after Events page was authored
+- **Symptom:** `eslint` reported `Parsing error: '}' expected` at line 57 col 91 (`ref={reveal}`), and `tsc` reported `(57,92)`. The line looked perfectly valid.
+- **Diagnosis (very fiddly):**
+  1. Hex-dumped line 57 — all bytes clean ASCII, brace/paren balance was mathematically correct.
+  2. Bisected the file by feeding truncations to `tsc`: first 20 lines parsed fine; first 21+ lines shifted the reported tip.
+  3. Conclusion: a subtly corrupted byte sequence in the earlier-written file desynchronized the tokenizer; the parser "re-synced" at line 57 and wrongly blamed `ref={reveal}`.
+- **Fix:** rewrote `app/events/page.tsx` from scratch with the Write tool, keeping structure identical + fixing two real bugs found along the way (unwired "Reset Filters" button → now calls `resetFilters()`; "Verified Attendeeng" typo → "Verified Attendance"). Parse error gone, lint clean.
+
+## 2. `Error: Export Grid2 doesn't exist in target module` — MUI v9
+
+- **When:** `next build` (Turbopack) with `Grid2 as Grid` import
+- **Why:** `Grid2` was merged into the single `Grid` component in MUI v7; v9 (`@mui/material@9.4.0`) no longer ships `Grid2`.
+- **Fix:** `import { Grid } from "@mui/material"` and keep the v7+ `size={{ xs: 12, sm: 6, md: 4 }}` prop API (verified against `Grid/Grid.d.ts` `GridSize`).
+
+## 3. `Module not found: '@mui/icons-material/StarOutline'`
+
+- **When:** `next build` on the star-rating component
+- **Why:** `StarOutline` was removed from recent `@mui/icons-material`; the actively maintained outline star is `StarBorder`.
+- **Fix:** switched `StarOutline` → `StarBorder` in `components/ui/EventStars.tsx` (read/write + interactive modes).
+
+## 4. `data too long` / TS2349 "expression is not callable" on `orpc.*` — client type
+
+- **When:** `next build` type-check on `lib/data/use-events.ts` + `lib/orpc/client.ts`
+- **Why:** `createORPCClient<AppRouter>` — the server router's leaves are `DecoratedProcedure`, which do **not** satisfy the client's `AnyNestedClient` constraint (they're objects, not callable `Client` functions). TS therefore fell back to raw router types → `orpc.event.list` not callable.
+- **Fix:** base the client on orpc's own router→client mapping type, exported from `@orpc/server`: `createORPCClient<RouterClient<AppRouter>>(rpcLink)`.
+
+## 5. `TS7006: Parameter 'e' implicitly has an 'any' type` (cascade from #4)
+
+- **When:** after fixing client typing, Events/Feedback page callbacks inferred `any`
+- **Why:** cascaded from the broken generic in #4 (client data resolved to `never[]`).
+- **Fix:** resolved by #4 + adding `createdAt` to the orpc output schema (`eventSchema`) and constraining `category/status/format/sentiment` to zod enum literals matching drizzle `mysqlEnum` (client output union now equals `$inferSelect`).
+
+## 6. `TS2344/TS2339: mutateAsync input of type 'never'` — feedback mutation
+
+- **When:** `app/feedback/page.tsx` initial write
+- **Why:** same root cause (#4) — `useMutation` input type collapsed to `never`.
+- **Fix:** resolved by #4; `mutationFn` now types the input from the client procedure.
+
+## 7. `TS2551: Property 'toFixed' does not exist on type 'string'` — avg() column
+
+- **Where:** `lib/orpc/router.ts` `feedback.create`
+- **Why:** MySQL `AVG()` returns a decimal string (e.g. `"4.6666667"`), so `agg[0].avgRating` is `string | null`; calling `.toFixed()` directly is a type error.
+- **Fix:** `Number(Number(agg[0]?.avgRating ?? 0).toFixed(1))`.
+
+## 8. `TS7053: Property '0' does not exist on type '{ id: number }'`
+
+- **Where:** `lib/orpc/router.ts`
+- **Why:** `const [inserted] = await ...$returningId()` destructures the first element, so `inserted` is already the `{ id }` object — `inserted[0]` is wrong.
+- **Fix:** use `inserted.id` in the follow-up select.
+
+## 9. Seed casts — `string` not assignable to enum unions / `eventDate: string` vs `Date`
+
+- **Where:** `scripts/seed.ts`
+- **Why:** drizzle `mysqlEnum` columns require literal unions; seed data used plain `string`. `eventDate` is typed `Date` on `$inferInsert` while the seed stores MySQL-style datetime strings.
+- **Fix:** `.values(x as unknown as (typeof events.$inferInsert)[])` and the equivalent for feedback (runtime is already correct; MySQL accepts the string datetime).
+
+## 10. `TS2353: Object literal may only specify known properties, and 'mt'` 
+
+- **Where:** `components/layout/Navbar.tsx`
+- **Why:** `mt` was used inside a plain `style={{ }}` object (CSS properties only) instead of MUI `sx`.
+- **Fix:** `style={{ ..., marginTop: 8 }}`.
+
+---
+
+*No syntax errors remain in the current build (`bun run lint` and `bun run build` both pass).*

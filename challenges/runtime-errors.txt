@@ -1,0 +1,64 @@
+# Runtime Errors + Fixes
+
+Log of every runtime error hit while building EventFlow, and how each was fixed.
+(Companion files: syntax-errors.txt, warnings.txt, biggest-challenge.txt)
+
+---
+
+## 1. `TypeError: undefined is not an object (evaluating 'client.config.supportBigNumbers = !0')` — mysql2/promise + drizzle
+
+- **Where:** `lib/db/index.ts` (first attempt)
+- **When:** starting drizzle with `drizzle({ connection: ... })` / `drizzle({ client: createPool({...}) })` using the `mysql2/promise` driver
+- **Why:** drizzle's mysql driver checks `client.config.supportBigNumbers` to pick result parsers. `mysql2/promise`'s `createConnection`/`createPool` return a Promise-wrapped client that does **not** expose `.config` synchronously, so drizzle's `construct()` crashed at startup.
+- **Fix:** use the callback-form client — `import mysql from "mysql2"` + `drizzle({ client: mysql.createPool({ ... , ssl: { rejectUnauthorized: false } }) })`. drizzle drives `.promise()` itself.
+
+## 2. Aiven SSL / `DATABASE_URL` `ssl-mode=REQUIRED`
+
+- **Where:** `.env` + every db connection
+- **When:** both dev scripts and drizzle-kit
+- **Why:** Aiven requires TLS; the `?ssl-mode=REQUIRED` query param in `DATABASE_URL` is parsed by mysql2 as an unknown option and ignored with `WARNING: "Ignoring invalid configuration option: ssl-mode"`. Without TLS the server rejects the handshake.
+- **Fix:** pass explicit `ssl: { rejectUnauthorized: false }` in the pool config (Aiven uses a self-signed CA bundle, so `rejectUnauthorized: false` is required). Left `DATABASE_URL` intact because drizzle.config.ts still parses it.
+
+## 3. `Error: Cannot find module '@orpc/server/adapters/fetch'` and `@orpc/client/adapters/fetch`
+
+- **Where:** `app/api/orpc/[[...path]]/route.ts` + `lib/orpc/client.ts`
+- **When:** first import attempt
+- **Why:** the `adapters/` exports were removed in orpc v2 beta; the fetch codecs moved to top-level packages.
+- **Fix:** import `RPCHandler` from `@orpc/server/fetch` and `RPCLink` from `@orpc/client/fetch` (both exist in 2.0.0-beta.34).
+
+## 4. orpc 404 "RPC not found" — path prefix mismatch
+
+- **Where:** the RPC route handler
+- **When:** any procedure call returned 404
+- **Why:** the client sends `POST /api/orpc/event/list`, server matcher keyed on `/event/list`. With a plain `route.ts` (no catch-all) the path was empty; even with a catch-all, the adapter must know the base prefix so it strips `/api/orpc`.
+- **Fix:** rename to `app/api/orpc/[[...path]]/route.ts` (optional catch-all) and call `handler.handle(request, { prefix: "/api/orpc" })`.
+
+## 5. `Data too long for column 'event_date'` — ISO datetime vs MySQL DATETIME
+
+- **Where:** insert/update of `events.event_date`
+- **When:** seeding + any write with ISO `T`/`Z` dates
+- **Why:** MySQL `DATETIME` accepts `"YYYY-MM-DD HH:MM:SS"`; the ISO `"2026-09-14T09:00:00.000Z"` overflows the column.
+- **Fix:** added a `D(...)` helper in the seed that rewrites ISO → `YYYY-MM-DD HH:MM:SS` (strip `T`, strip `Z`). drizzle/mysql2 on the write path also normalizes JS `Date` objects to the right literal, so create() is safe.
+
+## 6. `"Use client"` / hydration mismatch on skeleton keys (`key={i}`)
+
+- **Where:** skeleton list in the Events grid
+- **When:** `Array.from({length: PAGE_SIZE}).map((_, i) => ...key={i})` — constant keys are fine since the list is purely client-rendered after hydration.
+- **Fix:** none needed after review; keep stable keys (`sk-${i}`) to avoid re-mount flicker.
+
+## 7. `SlotProps: 'InputProps' does not exist` — MUI v9 TextField API
+
+- **Where:** `components/events/EventFilters.tsx`, feedback page inputs
+- **Why:** MUI v9 removed `InputProps`/`InputLabelProps` from `TextField` in favor of the `slotProps={{ input, inputLabel, ... }}` convention.
+- **Fix:** replaced `InputProps={{ startAdornment: ... }}` with `slotProps={{ input: { startAdornment: ... } }}`.
+
+## 8. `yield — todo: handle custom error strategy` (drizzle-kit generate)
+
+- **Where:** `drizzle-kit generate`
+- **When:** first migration generation
+- **Why:** drizzle-kit logged a benign message and continued; migration produced and applied successfully.
+- **Fix:** none needed (cosmetic output from drizzle-kit rc).
+
+---
+
+*All runtime errors above are reproducible-by-design before the listed fix; none remain open in the current build.*

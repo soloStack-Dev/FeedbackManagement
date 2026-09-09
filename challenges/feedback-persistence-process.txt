@@ -1,0 +1,25 @@
+# FEEDBACK PERSISTENCE PROCESS
+
+## Feature: store feedback in MySQL and refresh the Events page
+
+1. The user selects an event and enters the rating and optional feedback fields
+   on `app/feedback/page.tsx`.
+2. `useCreateFeedback` sends the validated payload through the typed orpc client
+   to `app/api/orpc/[[...path]]/route.ts`.
+3. `lib/orpc/router.ts` validates the request, inserts a row into the Drizzle
+   `feedback` table, calculates sentiment, and recalculates the parent event's
+   average rating and review count.
+4. The mutation waits for TanStack Query to invalidate and refetch the feedback
+   list, event feedback list, event list, and any event detail query.
+5. `app/events/page.tsx` receives the fresh event rows and updates event cards,
+   sorting by rating or feedback count, and the total Feedback threads stat.
+6. `components/events/EventDetailDialog.tsx` refetches the selected event and
+   its feedback rows, so the new review appears in the event detail view.
+
+## Validation checklist
+
+- Drizzle schema contains `feedback.eventId` as a foreign key to `events.id`.
+- The create procedure writes to MySQL before the client cache is refreshed.
+- Event aggregates are persisted in `events.rating` and `events.reviewCount`.
+- TanStack invalidation is awaited before the form displays success.
+- The Events page derives its feedback total from database-backed event data.
