@@ -1,0 +1,36 @@
+# oRPC REINSTALL AND SKILLS CHECKOUT FIX
+
+## Problem
+
+After running `bun add skills middleapi/orpc`, the project contained:
+
+- `@orpc/monorepo: middleapi/orpc` as a runtime dependency.
+- `skills` as a production dependency.
+- Caret ranges for `@orpc/client` and `@orpc/server`.
+
+That setup could make Vercel resolve an inconsistent oRPC package tree and
+reproduce missing `@orpc/client/fetch` or `ORPC_HEADER` exports.
+
+## Fix
+
+- Removed `@orpc/monorepo` from application dependencies. The GitHub monorepo
+  is a skill source, not a package required by the running Next.js app.
+- Pinned `@orpc/client` and `@orpc/server` to `2.0.0-beta.34`.
+- Kept the existing overrides for `@orpc/client`, `@orpc/contract`,
+  `@orpc/server`, and `@orpc/shared` at `2.0.0-beta.34`.
+- Moved the `skills` CLI to `devDependencies`.
+- Added the package script:
+
+  `bun run orpc:skill`
+
+  which runs `skills add middleapi/orpc --all -y`.
+- Regenerated `bun.lock` with `bun install`.
+
+The skill checkout is now available when explicitly requested and cannot alter
+the production oRPC dependency graph during a Vercel build.
+
+## Validation
+
+- `bun install --frozen-lockfile` passed.
+- `bun run lint` passed.
+- `bun run build` passed with Turbopack and TypeScript.
