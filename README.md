@@ -33,6 +33,15 @@ backend. The frontend never talks to the database directly: every data access
 flows through an [orpc](https://orpc.unnoq.com) RPC layer that shares **zod
 validation between client and server**, with Drizzle ORM + MySQL underneath.
 
+## Vercel deployment
+
+Deploy this `my-app` directory as the Vercel project root. The committed
+`vercel.json` installs dependencies with Bun from the lockfile and runs
+`bun run build`.
+
+Do not install `vercel/vercel-plugin`; it is not required for this Next.js
+application.
+
 ## Features
 
 ### Home

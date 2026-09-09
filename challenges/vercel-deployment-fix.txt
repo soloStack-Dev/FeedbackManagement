@@ -1,0 +1,38 @@
+# VERCEL DEPLOYMENT FIX
+
+## Problem
+
+Vercel failed while building the Home page through `LivePulse.tsx` and reported
+an orpc client module-resolution error around `lib/orpc/client.ts`.
+
+## Diagnosis
+
+The local production build and the locked Bun installation both succeeded. The
+`@orpc/client/fetch` export exists in the committed `@orpc/client` package, so
+the application import was valid. The deployment needed to use the same Bun
+lockfile dependency tree as the local build.
+
+## Fix
+
+Added `vercel.json` at the project root:
+
+- `framework`: `nextjs`
+- `installCommand`: `bun install --frozen-lockfile`
+- `buildCommand`: `bun run build`
+
+This makes Vercel install the exact versions recorded in `bun.lock` before
+running the Next.js production build.
+
+## Important command correction
+
+Do not run `bun add vercel/vercel-plugin` for this application. A standard
+Next.js project does not need that plugin to deploy to Vercel. The Vercel
+project root must point to this `my-app` directory, where `package.json`,
+`bun.lock`, and `vercel.json` are located.
+
+## Validation
+
+- `bun install --frozen-lockfile` passed.
+- `bun run lint` passed.
+- `bun run build` passed locally.
+- Commit and push the fix to the `main` branch after validation.
