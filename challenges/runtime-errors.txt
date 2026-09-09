@@ -62,3 +62,14 @@ Log of every runtime error hit while building EventFlow, and how each was fixed.
 ---
 
 *All runtime errors above are reproducible-by-design before the listed fix; none remain open in the current build.*
+
+## Round 2 (post-build QA)
+
+**12. Feedback silently never stored → Events never updated.** `feedback.create` returned `BAD_REQUEST (too_small, min 1)` for `attendeeRole / likedMost / couldImprove / notes` whenever the form was submitted with any blank optional text (always, in practice). The rejection happened during zod input parsing before the handler ran, so nothing was written and Event rating/reviewCount never changed — appearing as "feedback isn't updating the Events page".
+- **Fix (two layers):**
+  - Client `app/feedback/page.tsx`: `handleSubmit` maps blank optional text to `undefined` before calling the mutation.
+  - Server `lib/orpc/router.ts`: `optText()` zod helper — `preprocess` of any blank/whitespace-only string to `undefined`, then `.string().trim().min(1).optional()`. Robust even against raw `""` from external clients.
+- **Verification:** `scripts/flow-test.mjs` created feedback with entirely-empty optional fields → id inserted, `event.detail` rating 4→4.5, reviews 1→2, `event.list` and `feedback.listByEvent` both reflected it immediately; cleanup restored aggregates.
+
+**13. Stale server served the old build.** Rebuilds appeared to have "no effect" — the change to Remove/Cleanup zod `preprocess` never took. Root cause: on Windows, `bun run start` (Spawning `next start`) leaves an **orphaned `node` child** owning the port; `Stop-Process -Name bun` only kills the parent, so the old `next start` kept serving the old in-memory build manifest on 3100–3102.
+- **Fix:** kill the LISTENER, not the launcher: `Get-NetTCPConnection -LocalPort <port> -State Listen` → `Stop-Process -Id <owning pid>` before restarting. Smoke/flow tests also must target the freshly-started port.

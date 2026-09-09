@@ -44,3 +44,17 @@ Every warning observed and, where relevant, the decision taken.
 ---
 
 *All warnings cleared; only intentional/expected messages (mysql2 options note) remain.*
+
+## Round 2 (post-build QA)
+
+12. **Next/Image LCP warning** on `/events` — `event-images/web-development-event.png` flagged "Image should be above the fold with `loading="eager"`".
+- **Fix:** set `loading="eager"` on the `EventCard` Image (it's the first thing users see in the grid).
+
+13. **MUI v9 `Dialog` prop drift** — typecheck error `Property 'PaperProps' does not exist on DialogProps`.
+- **Fix:** `PaperProps` → `slotProps={{ paper: { ... } }}` in `components/events/EventDetailDialog.tsx` (MUI v9 moved all component slot styling under `slotProps`).
+
+---
+
+## Round 3 (view-details feature QA)
+
+14. **Eslint's own output on Windows PowerShell** — `bun run lint` writes to stderr, so PowerShell surfaces it as an error banner even when exit code is 0. Read the exit code, not the red text.

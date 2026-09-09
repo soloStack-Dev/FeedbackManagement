@@ -22,3 +22,19 @@
 - Any emotion/MUI global styling needs `EmotionRegistry` from `lib/emotion-registry.tsx`.
 - Don't fight this with `suppressHydrationWarning` — it masks real SSR bugs.
 - If a future mismatch is reported at a MUI component (AppBar, TextField, Select), check the SAME symptom first: look for `<style data-emotion` tags in the server HTML body via `curl`/`Invoke-WebRequest` before touching component logic.
+
+## 2. `Hydration failed ... style attribute` — `<body>` margin mismatch (shorthand vs longhand)
+
+- **Reported:** browser console on every page after the EmotionRegistry fix.
+- **Server vs client diff:**
+  ```
+  + <body>                                              (client: style="margin: 0px")
+  - <body style="margin-top: 0px; margin-right: 0px; margin-bottom: 0px; margin-left: 0px;">   (server)
+  ```
+  The root layout had `<body style={{ margin: 0 }}>` inline. On the **server**, React serializes the shorthand `margin: 0` into longhand `margin-top/right/bottom/left` properties; on the **client** MUI's `CssBaseline` re-applied the shorthand `margin: 0px` via the class, replacing the inline style → attribute mismatch.
+- **Root cause:** redundant reset. `CssBaseline` + Tailwind preflight already zero the body margin.
+- **Fix:** removed `style={{ margin: 0 }}` from `<body>` in `app/layout.tsx`.
+- **Verification (prod `/events` HTML):** `<body>` tag no longer carries any `style` attribute.
+
+## 3. Hydration mismatch was masking the real "feedback didn't save" bug
+- See `challenges/feedback-persistence-process.txt` — the empty-optional-field validation failure (`z.string().min(1)` on `""`) made every submission error out, so nothing ever reached React Query invalidation. Fixed with zod `preprocess` ("optText") in `lib/orpc/router.ts`.
