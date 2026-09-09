@@ -1,0 +1,43 @@
+# VERCEL oRPC DEPENDENCY MISMATCH FIX
+
+## Reported errors
+
+Vercel's Turbopack build failed with:
+
+- `Can't resolve '@orpc/client/fetch'`
+- `Export ORPC_HEADER doesn't exist in target module`
+- `Export ORPC_HEADER_VALUE doesn't exist in target module`
+
+The failures appeared through `lib/orpc/client.ts`, `lib/data/use-events.ts`,
+and `components/home/LivePulse.tsx`.
+
+## Root cause
+
+The application uses oRPC beta packages that must stay on the same release.
+Caret ranges such as `^2.0.0-beta.34` allowed a deployment installer to resolve
+an incompatible mix of `@orpc/client`, `@orpc/contract`, and `@orpc/shared`.
+That mix caused the client package to import contract exports that were missing
+from the resolved contract package. The missing fetch subpath was a secondary
+symptom of the mismatched package contents.
+
+## Fix applied
+
+- Pinned `@orpc/client` and `@orpc/server` to `2.0.0-beta.34`.
+- Added package overrides for `@orpc/client`, `@orpc/contract`,
+  `@orpc/server`, and `@orpc/shared`, all at `2.0.0-beta.34`.
+- Regenerated `bun.lock`.
+- Kept `vercel.json` configured with `bun install --frozen-lockfile` and
+  `bun run build`, so Vercel uses the reproducible dependency tree.
+
+No `vercel/vercel-plugin` package is needed for a Next.js Vercel deployment.
+
+## Validation
+
+From the `my-app` project root:
+
+- `bun install --frozen-lockfile` passed.
+- `bun run lint` passed.
+- `bun run build` passed with Turbopack and TypeScript.
+
+After pushing, redeploy the latest `main` commit in Vercel. Confirm the Vercel
+Root Directory is `my-app` if deploying from the parent workspace.

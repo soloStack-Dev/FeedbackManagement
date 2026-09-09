@@ -13,8 +13,8 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^9.4.0",
     "@mui/material": "^9.4.0",
-    "@orpc/client": "^2.0.0-beta.34",
-    "@orpc/server": "^2.0.0-beta.34",
+    "@orpc/client": "2.0.0-beta.34",
+    "@orpc/server": "2.0.0-beta.34",
     "@tanstack/react-query": "^5.102.8",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^1.0.0-rc.4",
@@ -47,5 +47,11 @@
   "trustedDependencies": [
     "sharp",
     "unrs-resolver"
-  ]
+  ],
+  "overrides": {
+    "@orpc/client": "2.0.0-beta.34",
+    "@orpc/contract": "2.0.0-beta.34",
+    "@orpc/server": "2.0.0-beta.34",
+    "@orpc/shared": "2.0.0-beta.34"
+  }
 }

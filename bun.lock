@@ -9,8 +9,8 @@
         "@emotion/styled": "^11.14.1",
         "@mui/icons-material": "^9.4.0",
         "@mui/material": "^9.4.0",
-        "@orpc/client": "^2.0.0-beta.34",
-        "@orpc/server": "^2.0.0-beta.34",
+        "@orpc/client": "2.0.0-beta.34",
+        "@orpc/server": "2.0.0-beta.34",
         "@tanstack/react-query": "^5.102.8",
         "dotenv": "^17.4.2",
         "drizzle-orm": "^1.0.0-rc.4",
@@ -41,6 +41,12 @@
     "sharp",
     "unrs-resolver",
   ],
+  "overrides": {
+    "@orpc/client": "2.0.0-beta.34",
+    "@orpc/contract": "2.0.0-beta.34",
+    "@orpc/server": "2.0.0-beta.34",
+    "@orpc/shared": "2.0.0-beta.34",
+  },
   "packages": {
     "@alloc/quick-lru": ["@alloc/quick-lru@5.3.0", "", {}, "sha512-U4+70Pc5ZS9osnCBCE5Jha/ciHM+Yp+CNMNC/7HvYbNRk1Ldd+f7qO65W5qfhu/TCv+/ozljlXXe9Nj8419DMA=="],
 
